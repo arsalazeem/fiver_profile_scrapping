@@ -1,23 +1,16 @@
 import json
 import pdb
 import re
-import unicodedata
 import urllib
-
 from bs4 import BeautifulSoup
 import requests
 import json
+import validators
 
 message_global = {
     "success_scrap": "User data scrapped successfully",
-    "url_validation_error": "Please provide a valid url starting with https://www.fiverr.com/",
-    "key_error": "Please send the the user profile url in 'url' key"
+    "url_validation_error": "Please provide a valid url starting with https://www.fiverr.com/"
 }
-
-
-def _parse_html(get_response):
-    soup = BeautifulSoup(get_response.content, "html.parser")
-    return soup
 
 
 def _return_response(user_profile, msg, success):
@@ -38,8 +31,10 @@ def _fetch_html_structure(url):
     return response
 
 
-def _get_reviews_as_buyer(soup):
+def _get_reviews_as_buyer(response):
     reviews_list = []
+    soup = BeautifulSoup(response.content, "html.parser")
+    the_latest = soup.find(class_="reviews-package is-collapsed")
     p_tags_list = soup.find_all("p", {"class": "text-body-2"})
     if len(p_tags_list) < 1:
         return reviews_list
@@ -52,8 +47,10 @@ def _get_reviews_as_buyer(soup):
     return reviews_list
 
 
-def _get_reviews_using_soup(soup):
+def _get_reviews_using_soup(response):
     reviews_list = []
+    soup = BeautifulSoup(response.content, "html.parser")
+    the_latest = soup.find(class_="review-list")
     p_tags_list = soup.find_all("p", {"class": "text-body-2"})
     if len(p_tags_list) < 1:
         return reviews_list
@@ -66,105 +63,44 @@ def _get_reviews_using_soup(soup):
     return reviews_list
 
 
-def _get_data_using_soup(class_name, soup):
+def _get_data_using_soup(response, class_name):
     try:
+        soup = BeautifulSoup(response.content, "html.parser")
         text_data = soup.find(class_=class_name).text
         return str(text_data)
     except Exception as e:
         return "Not found"
 
 
-def _get_langs(soup):
-    langs_list = []
-    try:
-        p_tags_list = soup.find_all("div", {"class": "languages"})
-        skills_html_list = p_tags_list[0].find_all("li")
-        for skills in skills_html_list:
-            langs_list.append(unicodedata.normalize("NFKD", skills.text).replace("  - Native/Bilingual", ""))
-        return langs_list
-    except Exception as e:
-        empty_list = []
-        return empty_list
-
-
-# languages
-
-def _get_skills(soup):
-    skills_list = []
-    p_tags_list = soup.find_all("div", {"class": "skills"})
-    skills_html_list = p_tags_list[0].find_all("li")
-    for skills in skills_html_list:
-        skills_list.append(skills.text)
-    return skills_list
-
-
-def fetch_profile(url):
-    if not validate_url(url):
-        return _return_response({}, message_global.get("url_validation_error"), 0)
-    try:
-        classes = {
-            "average_review": 'rating-score rating-num',
-            "total_reviews": 'ratings-count rating-count',
-            "exact_review": "total-rating header-total-rating",
-            "about_me": 'description',
-        }
-        response = _fetch_html_structure(url)  # get response as html if calling an html page directly
-        soup = _parse_html(response)
-        langs_list = _get_langs(
-            soup)  # call langs list and it returns a list of languages,pass the basic response object
-        skills_list = _get_skills(soup)  # return list of skills
-        average_review = _get_data_using_soup(classes.get("average_review"), soup)  # returns average average rating
-        total_reviews = _get_data_using_soup(classes.get("total_reviews"), soup)  # returns total number of views
-        if "k+" in total_reviews:  # if the reviews are like 1k+ look in div with below class
-            print("Fetching exact reviews")
-            total_reviews = _get_data_using_soup(classes.get(
-                "exact_review"), soup)  # look for exact number of reviews and return number of reviews
-        about = _get_data_using_soup(classes.get("about_me"), soup)  # returns about me for the user profile
-        reviews_list = _get_reviews_using_soup(soup)
-        total_reviews = total_reviews.replace("(", "")  # normalize text
-        total_reviews = total_reviews.replace(")", "")  # normalize text
-        total_reviews = total_reviews.replace(" reviews", "")  # normalize text
-        about = about[
-                11:]  # remove the word description from the start of description, description is a 11 letter long word
-        try:  # try to convert the string values i.e total number of reviews and average to int/float
-            total_reviews = total_reviews.replace(',', "")
-            total_reviews = float(total_reviews)
-            average_review = float(average_review)
-        except Exception as error:  # if there is any exception keep data types to strings
-            print(error)
-        scrapped_data = {  # create the data object to be sent in response
-            "total_projects_completed": total_reviews,
-            "average_review": average_review,
-            "total_reviews_count": total_reviews,
-            "about_me": about,
-            "reviews_list": reviews_list,
-            "skills": skills_list,
-            "languages": langs_list
-        }
-
-        return _return_response(scrapped_data, message_global.get("success_scrap"),
-                                1)  # calling this method with return the response object with headers
-
-    except Exception as error:
-        error_string = str(error)
-        return _return_response({}, error_string, 0)  # if there is an exption return this object
-
-
 def validate_url(url):
     target = "https://www.fiverr.com/"
-    if target in url and target != url:
+    if target in url:
         return True
     else:
         return False
 
 
-def lambda_handler(event, context):
-    try:
-        url_body = json.loads(event['body'])
-        url = url_body["url"]
-    except Exception as e:
-        return _return_response({}, message_global.get("key_error"), 0)
+def _fetch_starts_and_review(response):
+    reviews_list = []
+    soup = BeautifulSoup(response.content, "html.parser")
+    the_latest = soup.find(class_="review-list")
 
+    if len(the_latest) < 1:
+        return reviews_list
+    else:
+        for i in the_latest:
+            single_list = i.find(class_="review-item")
+            star_counts = single_list.find(class_="total-rating-out-five text-display-7")
+            review_text = single_list.find(class_="text-body-2")
+            reviews_list.append({"review_text":review_text.text,"review_rating":star_counts.text})
+    return reviews_list
+
+
+def fetch_profile(url):
+    valid = validators.url(url)
+    if not valid:
+        url = "https://www." + url
+    print("Recieved URL is" + " " + url)
     if not validate_url(url):
         return _return_response({}, message_global.get("url_validation_error"), 0)
     try:
@@ -174,45 +110,92 @@ def lambda_handler(event, context):
             "exact_review": "total-rating header-total-rating",
             "about_me": 'description',
         }
-        response = _fetch_html_structure(url)  # get response as html if calling an html page directly
-        soup = _parse_html(response)
-        langs_list = _get_langs(soup)  # call langs list and it returns a list of languages,pass the basic response object
-        skills_list = _get_skills(soup)  # return list of skills
-        average_review = _get_data_using_soup(classes.get("average_review"),soup)  # returns average average rating
-        total_reviews = _get_data_using_soup(classes.get("total_reviews"),soup)  # returns total number of views
-        if "k+" in total_reviews:  # if the reviews are like 1k+ look in div with below class
+        response = _fetch_html_structure(url)
+        reviews_with_ratings=_fetch_starts_and_review(response)
+        average_review = _get_data_using_soup(response, classes.get("average_review"))
+        total_reviews = _get_data_using_soup(response, classes.get("total_reviews"))
+        if "k+" in total_reviews:
             print("Fetching exact reviews")
-            total_reviews = _get_data_using_soup(classes.get(
-                "exact_review"),soup)  # look for exact number of reviews and return number of reviews
-        about = _get_data_using_soup(classes.get("about_me"),soup)  # returns about me for the user profile
-        reviews_list = _get_reviews_using_soup(soup)
-        total_reviews = total_reviews.replace("(", "")  # normalize text
-        total_reviews = total_reviews.replace(")", "")  # normalize text
-        total_reviews = total_reviews.replace(" reviews", "")  # normalize text
-        about = about[
-                11:]  # remove the word description from the start of description, description is a 11 letter long word
-        try:  # try to convert the string values i.e total number of reviews and average to int/float
+            total_reviews = _get_data_using_soup(response, classes.get("exact_review"))
+        about = _get_data_using_soup(response, classes.get("about_me"))
+        reviews_list = _get_reviews_using_soup(response)
+        total_reviews = total_reviews.replace("(", "")
+        total_reviews = total_reviews.replace(")", "")
+        total_reviews = total_reviews.replace(" reviews", "")
+        about = about[11:]
+        try:
             total_reviews = total_reviews.replace(',', "")
             total_reviews = float(total_reviews)
             average_review = float(average_review)
-        except Exception as error:  # if there is any exception keep data types to strings
+        except Exception as error:
             print(error)
-        scrapped_data = {  # create the data object to be sent in response
+        scrapped_data = {
             "total_projects_completed": total_reviews,
             "average_review": average_review,
             "total_reviews_count": total_reviews,
             "about_me": about,
             "reviews_list": reviews_list,
-            "skills": skills_list,
-            "languages": langs_list
+            "reviews_with_rating":reviews_with_ratings
         }
 
-        return _return_response(scrapped_data, message_global.get("success_scrap"),
-                                1)  # calling this method with return the response object with headers
+        return _return_response(scrapped_data, message_global.get("success_scrap"), 1)
 
     except Exception as error:
         error_string = str(error)
-        return _return_response({}, error_string, 0)  # if there is an exption return this object
+        return _return_response({}, error_string, 0)
 
 
-# print(fetch_profile("https://www.fiverr.com/rankterpriseuk"))
+
+
+
+
+def lambda_handler(event, context):
+    url_body = json.loads(event['body'])
+    get_url = url_body["url"]
+    url = get_url
+    valid=validators.url(url)
+    if not valid:
+        url="https://www."+url
+    print("Recieved URL is"+" "+url)
+    if not validate_url(url):
+        return _return_response({}, message_global.get("url_validation_error"), 0)
+    try:
+        classes = {
+            "average_review": 'rating-score rating-num',
+            "total_reviews": 'ratings-count rating-count',
+            "exact_review": "total-rating header-total-rating",
+            "about_me": 'description',
+        }
+        response = _fetch_html_structure(url)
+        average_review = _get_data_using_soup(response, classes.get("average_review"))
+        total_reviews = _get_data_using_soup(response, classes.get("total_reviews"))
+        if "k+" in total_reviews:
+            print("Fetching exact reviews")
+            total_reviews = _get_data_using_soup(response, classes.get("exact_review"))
+        about = _get_data_using_soup(response, classes.get("about_me"))
+        reviews_list = _get_reviews_using_soup(response)
+        total_reviews = total_reviews.replace("(", "")
+        total_reviews = total_reviews.replace(")", "")
+        total_reviews = total_reviews.replace(" reviews", "")
+        about = about[11:]
+        try:
+            total_reviews = total_reviews.replace(',', "")
+            total_reviews = float(total_reviews)
+            average_review = float(average_review)
+        except Exception as error:
+            print(error)
+        scrapped_data = {
+            "total_projects_completed": total_reviews,
+            "average_review": average_review,
+            "total_reviews_count": total_reviews,
+            "about_me": about,
+            "reviews_list": reviews_list
+        }
+
+        return _return_response(scrapped_data, message_global.get("success_scrap"), 1)
+
+    except Exception as error:
+        error_string = str(error)
+        return _return_response({}, error_string, 0)
+
+

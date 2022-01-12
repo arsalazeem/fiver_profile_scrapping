@@ -1,4 +1,4 @@
-#!/home/arsal/upload/venv/bin/python
+#!/home/arsal/web_scrapping/profile/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys
