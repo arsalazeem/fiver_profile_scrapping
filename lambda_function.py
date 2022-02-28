@@ -7,9 +7,22 @@ import requests
 import json
 import validators
 
+scrap_api={
+    "api_key":"11adcc17388195658fe18d63a4cb715e",
+    "url":"http://api.scraperapi.com?api_key=11adcc17388195658fe18d63a4cb715e&url="
+}
+
+def _fetch_html_structure_using_serive(url):
+    # header = {'User-Agent': 'Mozilla/5.0'}
+    response = requests.get(scrap_api["url"]+url)
+    # print(response.status_code)
+    return response
+
+
 message_global = {
     "success_scrap": "User data scrapped successfully",
-    "url_validation_error": "Please provide a valid url starting with https://fiverr.com/"
+    "url_validation_error": "Please provide a valid url starting with https://fiverr.com/",
+    "url_not_exist":"This fiverr profile url doesn't exit"
 }
 
 
@@ -26,9 +39,26 @@ def _return_response(user_profile, msg, success):
 
 
 def _fetch_html_structure(url):
-    header = {'User-Agent': 'Mozilla/5.0'}
-    response = requests.get(url, headers=header)
+    response = requests.get(scrap_api["url"] + url)
     return response
+
+
+
+
+
+def validate_profile_url(response,profile_url):
+    # profile_title=profile_url.split("/")[1]
+    profile_url_list=profile_url.split("/")
+    profile_title=profile_url_list[-1]
+    soup = BeautifulSoup(response.content, "html.parser")
+    the_title = soup.find("title")
+    the_title=the_title.text
+    if profile_title in the_title:
+        return True
+    else:
+        print("This was the page title="+the_title)
+        print("This was the profile title="+profile_title)
+        return False
 
 
 def _get_reviews_as_buyer(response):
@@ -123,7 +153,12 @@ def fetch_profile(url):
             "exact_review": "total-rating header-total-rating",
             "about_me": 'description',
         }
+
         response = _fetch_html_structure(url)
+        if not validate_profile_url(response,url):
+            return _return_response({}, message_global.get("url_not_exist"), 0)
+        else:
+            pass
         reviews_with_ratings = _fetch_starts_and_review(response)
         average_review = _get_data_using_soup(response, classes.get("average_review"))
         total_reviews = _get_data_using_soup(response, classes.get("total_reviews"))
@@ -174,7 +209,14 @@ def lambda_handler(event, context):
             "exact_review": "total-rating header-total-rating",
             "about_me": 'description',
         }
+
         response = _fetch_html_structure(url)
+        if not validate_profile_url(response, url):
+            print("Invalid Profile link")
+            #if the url redirect to the fiverr homepage it means that this url doesn't exists
+            return _return_response({}, message_global.get("url_not_exist"), 0)
+        else:
+            pass
         reviews_with_ratings = _fetch_starts_and_review(response)
         average_review = _get_data_using_soup(response, classes.get("average_review"))
         total_reviews = _get_data_using_soup(response, classes.get("total_reviews"))
@@ -204,8 +246,12 @@ def lambda_handler(event, context):
         return _return_response(scrapped_data, message_global.get("success_scrap"), 1)
 
     except Exception as error:
+        print(error)
         error_string = str(error)
         return _return_response({}, error_string, 0)
 
 
 
+# if __name__ == '__main__':
+#     response=fetch_profile("https://www.fiverr.com/chadshirley")
+#     print(response)
