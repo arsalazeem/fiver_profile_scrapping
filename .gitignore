@@ -6,6 +6,8 @@
 # Node artifact files
 node_modules/
 dist/
+package/
+venv/
 
 # Compiled Java class files
 *.class
@@ -15,7 +17,7 @@ dist/
 
 # Log files
 *.log
-
+*.zip
 # Package files
 *.jar
 
