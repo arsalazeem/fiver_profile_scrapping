@@ -61,7 +61,8 @@ def _fetch_html_structure(url):
     }
     response = http.request('GET', url,headers=header)
     return response.data
-    # response = requests.get(scrap_api["url"] + url)
+    #comment above lines i.e from 47 to 63 and use the below two lines if you want to use scrap api service for scrapping it will prevent scrapper from being blocked.
+    # response = requests.get(scrap_api["url"] + url)   /
     # return response
 
 
