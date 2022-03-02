@@ -1,27 +1,24 @@
 import json
 import pdb
 import re
-import time
 import urllib
 from bs4 import BeautifulSoup
 import requests
 import json
 import validators
-import urllib3
-http = urllib3.PoolManager()
+import time
+credentials={
+    "api_key": "11adcc17388195658fe18d63a4cb715e"
+}
 scrap_api={
-    "api_key":"11adcc17388195658fe18d63a4cb715e",
-    "url":"http://api.scraperapi.com?api_key=11adcc17388195658fe18d63a4cb715e&url="
+    "url":"http://api.scraperapi.com?api_key="+credentials.get("api_key",None)+"&url="
 }
 
 def _fetch_html_structure_using_serive(url):
-    header = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36'}
-    response = http.request('GET', url,headers=header)
-    return response.data
-    # #
-    # response = requests.get(scrap_api["url"]+url)
-    # # print(response.status_code)
-    # return response
+    # header = {'User-Agent': 'Mozilla/5.0'}
+    response = requests.get(scrap_api["url"]+url)
+    # print(response.status_code)
+    return response
 
 
 message_global = {
@@ -44,26 +41,8 @@ def _return_response(user_profile, msg, success):
 
 
 def _fetch_html_structure(url):
-    header = {
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Accept-Language": "en-US,en;q=0.9,ur-PK;q=0.8,ur;q=0.7,zh-CN;q=0.6,zh;q=0.5,hi;q=0.4",
-        "Dnt": "1",
-        "Sec-Ch-Ua": "\" Not A;Brand\";v=\"99\", \"Chromium\";v=\"98\", \"Google Chrome\";v=\"98\"",
-        "Sec-Ch-Ua-Mobile": "?0",
-        "Sec-Ch-Ua-Platform": "\"Linux\"",
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "cross-site",
-        "Sec-Fetch-User": "?1",
-        "Upgrade-Insecure-Requests": "1",
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36"
-    }
-    response = http.request('GET', url,headers=header)
-    return response.data
-    #comment above lines i.e from 47 to 63 and use the below two lines if you want to use scrap api service for scrapping it will prevent scrapper from being blocked.
-    # response = requests.get(scrap_api["url"] + url)   /
-    # return response
+    response = requests.get(scrap_api["url"] + url)
+    return response
 
 
 
@@ -73,7 +52,7 @@ def validate_profile_url(response,profile_url):
     # profile_title=profile_url.split("/")[1]
     profile_url_list=profile_url.split("/")
     profile_title=profile_url_list[-1]
-    soup = BeautifulSoup(response, "html.parser")
+    soup = BeautifulSoup(response.content, "html.parser")
     the_title = soup.find("title")
     the_title=the_title.text
     if profile_title in the_title:
@@ -86,7 +65,7 @@ def validate_profile_url(response,profile_url):
 
 def _get_reviews_as_buyer(response):
     reviews_list = []
-    soup = BeautifulSoup(response, "html.parser")
+    soup = BeautifulSoup(response.content, "html.parser")
     the_latest = soup.find(class_="reviews-package is-collapsed")
     p_tags_list = soup.find_all("p", {"class": "text-body-2"})
     if len(p_tags_list) < 1:
@@ -102,7 +81,7 @@ def _get_reviews_as_buyer(response):
 
 def _get_reviews_using_soup(response):
     reviews_list = []
-    soup = BeautifulSoup(response, "html.parser")
+    soup = BeautifulSoup(response.content, "html.parser")
     the_latest = soup.find(class_="review-list")
     p_tags_list = soup.find_all("p", {"class": "text-body-2"})
     if len(p_tags_list) < 1:
@@ -118,7 +97,7 @@ def _get_reviews_using_soup(response):
 
 def _get_data_using_soup(response, class_name):
     try:
-        soup = BeautifulSoup(response, "html.parser")
+        soup = BeautifulSoup(response.content, "html.parser")
         text_data = soup.find(class_=class_name).text
         return str(text_data)
     except Exception as e:
@@ -162,7 +141,12 @@ def _fetch_starts_and_review(response):
         return []
 
 
+def get_current_time():
+    return time.time()
+
+
 def fetch_profile(url):
+    start_time=get_current_time()
     valid = validators.url(url)
     if not valid:
         url = "https://www." + url
@@ -176,7 +160,7 @@ def fetch_profile(url):
             "exact_review": "total-rating header-total-rating",
             "about_me": 'description',
         }
-        time.sleep(0.0001*50)
+
         response = _fetch_html_structure(url)
         if not validate_profile_url(response,url):
             return _return_response({}, message_global.get("url_not_exist"), 0)
@@ -207,7 +191,8 @@ def fetch_profile(url):
             "about_me": about,
             "reviews_with_rating": reviews_with_ratings
         }
-
+        execution_time=get_current_time()-start_time
+        print(int(execution_time)+1)
         return _return_response(scrapped_data, message_global.get("success_scrap"), 1)
 
     except Exception as error:
@@ -216,6 +201,7 @@ def fetch_profile(url):
 
 
 def lambda_handler(event, context):
+    start_time=get_current_time()
     url_body = json.loads(event['body'])
     get_url = url_body["url"]
     url = get_url
@@ -232,9 +218,11 @@ def lambda_handler(event, context):
             "exact_review": "total-rating header-total-rating",
             "about_me": 'description',
         }
-        time.sleep(0.0001 * 500)
+
         response = _fetch_html_structure(url)
         if not validate_profile_url(response, url):
+            print("Invalid Profile link")
+            #if the url redirect to the fiverr homepage it means that this url doesn't exists
             return _return_response({}, message_global.get("url_not_exist"), 0)
         else:
             pass
@@ -263,19 +251,23 @@ def lambda_handler(event, context):
             "about_me": about,
             "reviews_with_rating": reviews_with_ratings
         }
-
+        print("Data Scrapped Successfully")
+        execution_time = get_current_time() - start_time
+        print("Time it took to scrap profile")
+        print(int(execution_time) + 1)
         return _return_response(scrapped_data, message_global.get("success_scrap"), 1)
 
     except Exception as error:
+        print("Time it took to scrap profile")
+        execution_time = get_current_time() - start_time
+        print(int(execution_time) + 1)
+        print(error)
         error_string = str(error)
         return _return_response({}, error_string, 0)
 
 
-
-
-# response=_fetch_html_structure_using_serive("https://www.fiverr.com/")
-# print(response)
-if __name__ == '__main__':
-    for i in range(1,10):
-        response = fetch_profile("https://www.fiverr.com/webgirl80")
-        print(response)
+#
+# if __name__ == '__main__':
+#     response=fetch_profile("https://www.fiverr.com/chadshirley")
+#     print(response)
+# # print(scrap_api)
