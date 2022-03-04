@@ -201,6 +201,8 @@ def fetch_profile(url):
 
 
 def lambda_handler(event, context):
+    print(event)
+    quit()
     start_time=get_current_time()
     url_body = json.loads(event['body'])
     get_url = url_body["url"]
