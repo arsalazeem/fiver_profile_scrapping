@@ -1,30 +1,19 @@
-import json
-import pdb
-import re
-import urllib
 from bs4 import BeautifulSoup
 import requests
 import json
 import validators
-import time
-credentials={
+
+credentials = {
     "api_key": "11adcc17388195658fe18d63a4cb715e"
 }
-scrap_api={
-    "url":"http://api.scraperapi.com?api_key="+credentials.get("api_key",None)+"&url="
+scrap_api = {
+    "url": "http://api.scraperapi.com?api_key=" + credentials.get("api_key", None) + "&url="
 }
-
-def _fetch_html_structure_using_serive(url):
-    # header = {'User-Agent': 'Mozilla/5.0'}
-    response = requests.get(scrap_api["url"]+url)
-    # print(response.status_code)
-    return response
-
-
 message_global = {
+    "payload_error": "Please send a fiverr url in url key",
     "success_scrap": "User data scrapped successfully",
     "url_validation_error": "Please provide a valid url starting with https://fiverr.com/",
-    "url_not_exist":"This fiverr profile url doesn't exit"
+    "url_not_exist": "This fiverr profile url doesn't exit"
 }
 
 
@@ -41,48 +30,32 @@ def _return_response(user_profile, msg, success):
 
 
 def _fetch_html_structure(url):
-    response = requests.get(scrap_api["url"] + url)
-    return response
+    res = requests.get(scrap_api["url"] + url)
+    code = int(res.status_code)
+    print(code)
+    if res.status_code < 200 or res.status_code > 399:
+        _fetch_html_structure(url)
+        print("Retrying Have Patince")
+    return res
 
 
-
-
-
-def validate_profile_url(response,profile_url):
+def validate_profile_url(res, profile_url):
     # profile_title=profile_url.split("/")[1]
-    profile_url_list=profile_url.split("/")
-    profile_title=profile_url_list[-1]
-    soup = BeautifulSoup(response.content, "html.parser")
+    profile_url_list = profile_url.split("/")
+    profile_title = profile_url_list[-1]
+    soup = BeautifulSoup(res.content, "html.parser")
     the_title = soup.find("title")
-    the_title=the_title.text
+    the_title = the_title.text
     if profile_title in the_title:
         return True
     else:
-        print("This was the page title="+the_title)
-        print("This was the profile title="+profile_title)
         return False
 
 
-def _get_reviews_as_buyer(response):
+def _get_reviews_using_soup(res):
     reviews_list = []
-    soup = BeautifulSoup(response.content, "html.parser")
-    the_latest = soup.find(class_="reviews-package is-collapsed")
-    p_tags_list = soup.find_all("p", {"class": "text-body-2"})
-    if len(p_tags_list) < 1:
-        return reviews_list
-    for i in range(0, len(p_tags_list) - 1):
-        if i % 2 == 0:  # showing every even p tag because p at odd tags contains information text
-            review_text = str(p_tags_list[i].text)
-            # review_text = _normalize_review(review_text)
-            reviews_list.append(review_text)
+    soup = BeautifulSoup(res.content, "html.parser")
 
-    return reviews_list
-
-
-def _get_reviews_using_soup(response):
-    reviews_list = []
-    soup = BeautifulSoup(response.content, "html.parser")
-    the_latest = soup.find(class_="review-list")
     p_tags_list = soup.find_all("p", {"class": "text-body-2"})
     if len(p_tags_list) < 1:
         return reviews_list
@@ -100,8 +73,9 @@ def _get_data_using_soup(response, class_name):
         soup = BeautifulSoup(response.content, "html.parser")
         text_data = soup.find(class_=class_name).text
         return str(text_data)
-    except Exception as e:
+    except:
         return str(0)
+
 
 def default_about_me_check(about_me):
     if "Just add your touch" in about_me:
@@ -109,8 +83,9 @@ def default_about_me_check(about_me):
     else:
         return about_me
 
+
 def validate_url(url):
-    question_mark="?"
+    question_mark = "?"
     if question_mark in url:
         url_list = url.split("?")
         url = url_list[0]
@@ -122,7 +97,7 @@ def validate_url(url):
         return False
 
 
-def _fetch_starts_and_review(response):
+def _fetch_stars_and_review(response):
     reviews_list = []
     try:
         soup = BeautifulSoup(response.content, "html.parser")
@@ -141,72 +116,7 @@ def _fetch_starts_and_review(response):
         return []
 
 
-def get_current_time():
-    return time.time()
-
-
 def fetch_profile(url):
-    start_time=get_current_time()
-    valid = validators.url(url)
-    if not valid:
-        url = "https://www." + url
-    print("Recieved URL is" + " " + url)
-    if not validate_url(url):
-        return _return_response({}, message_global.get("url_validation_error"), 0)
-    try:
-        classes = {
-            "average_review": 'rating-score rating-num',
-            "total_reviews": 'ratings-count rating-count',
-            "exact_review": "total-rating header-total-rating",
-            "about_me": 'description',
-        }
-
-        response = _fetch_html_structure(url)
-        if not validate_profile_url(response,url):
-            return _return_response({}, message_global.get("url_not_exist"), 0)
-        else:
-            pass
-        reviews_with_ratings = _fetch_starts_and_review(response)
-        average_review = _get_data_using_soup(response, classes.get("average_review"))
-        total_reviews = _get_data_using_soup(response, classes.get("total_reviews"))
-        if "k+" in total_reviews:
-            print("Fetching exact reviews")
-            total_reviews = _get_data_using_soup(response, classes.get("exact_review"))
-        about = _get_data_using_soup(response, classes.get("about_me"))
-        about=default_about_me_check(about)
-        total_reviews = total_reviews.replace("(", "")
-        total_reviews = total_reviews.replace(")", "")
-        total_reviews = total_reviews.replace(" reviews", "")
-        about = about[11:]
-        try:
-            total_reviews = total_reviews.replace(',', "")
-            total_reviews = float(total_reviews)
-            average_review = float(average_review)
-        except Exception as error:
-            print(error)
-        scrapped_data = {
-            "total_projects_completed": total_reviews,
-            "average_review": average_review,
-            "total_reviews_count": total_reviews,
-            "about_me": about,
-            "reviews_with_rating": reviews_with_ratings
-        }
-        execution_time=get_current_time()-start_time
-        print(int(execution_time)+1)
-        return _return_response(scrapped_data, message_global.get("success_scrap"), 1)
-
-    except Exception as error:
-        error_string = str(error)
-        return _return_response({}, error_string, 0)
-
-
-def lambda_handler(event, context):
-    print(event)
-    quit()
-    start_time=get_current_time()
-    url_body = json.loads(event['body'])
-    get_url = url_body["url"]
-    url = get_url
     valid = validators.url(url)
     if not valid:
         url = "https://www." + url
@@ -224,11 +134,11 @@ def lambda_handler(event, context):
         response = _fetch_html_structure(url)
         if not validate_profile_url(response, url):
             print("Invalid Profile link")
-            #if the url redirect to the fiverr homepage it means that this url doesn't exists
+            # if the url redirect to the fiverr homepage it means that this url doesn't exists
             return _return_response({}, message_global.get("url_not_exist"), 0)
         else:
             pass
-        reviews_with_ratings = _fetch_starts_and_review(response)
+        reviews_with_ratings = _fetch_stars_and_review(response)
         average_review = _get_data_using_soup(response, classes.get("average_review"))
         total_reviews = _get_data_using_soup(response, classes.get("total_reviews"))
         if "k+" in total_reviews:
@@ -253,23 +163,74 @@ def lambda_handler(event, context):
             "about_me": about,
             "reviews_with_rating": reviews_with_ratings
         }
-        print("Data Scrapped Successfully")
-        execution_time = get_current_time() - start_time
-        print("Time it took to scrap profile")
-        print(int(execution_time) + 1)
         return _return_response(scrapped_data, message_global.get("success_scrap"), 1)
 
     except Exception as error:
-        print("Time it took to scrap profile")
-        execution_time = get_current_time() - start_time
-        print(int(execution_time) + 1)
         print(error)
         error_string = str(error)
         return _return_response({}, error_string, 0)
 
 
-#
-# if __name__ == '__main__':
-#     response=fetch_profile("https://www.fiverr.com/chadshirley")
-#     print(response)
-# # print(scrap_api)
+def lambda_handler(event, context):
+    try:
+        url_body = json.loads(event['body'])
+        get_url = url_body["url"]
+    except:
+        return _return_response({}, message_global.get("payload_error", "some error occurred"), 0)
+        # payload_error
+    url = get_url
+    valid = validators.url(url)
+    if not valid:
+        url = "https://www." + url
+    print("Recieved URL is" + " " + url)
+    if not validate_url(url):
+        return _return_response({}, message_global.get("url_validation_error"), 0)
+    try:
+        classes = {
+            "average_review": 'rating-score rating-num',
+            "total_reviews": 'ratings-count rating-count',
+            "exact_review": "total-rating header-total-rating",
+            "about_me": 'description',
+        }
+
+        response = _fetch_html_structure(url)
+        if not validate_profile_url(response, url):
+            print("Invalid Profile link")
+            # if the url redirect to the fiverr homepage it means that this url doesn't exists
+            return _return_response({}, message_global.get("url_not_exist"), 0)
+        else:
+            pass
+        reviews_with_ratings = _fetch_stars_and_review(response)
+        average_review = _get_data_using_soup(response, classes.get("average_review"))
+        total_reviews = _get_data_using_soup(response, classes.get("total_reviews"))
+        if "k+" in total_reviews:
+            print("Fetching exact reviews")
+            total_reviews = _get_data_using_soup(response, classes.get("exact_review"))
+        about = _get_data_using_soup(response, classes.get("about_me"))
+        about = default_about_me_check(about)
+        total_reviews = total_reviews.replace("(", "")
+        total_reviews = total_reviews.replace(")", "")
+        total_reviews = total_reviews.replace(" reviews", "")
+        about = about[11:]
+        try:
+            total_reviews = total_reviews.replace(',', "")
+            total_reviews = float(total_reviews)
+            average_review = float(average_review)
+        except Exception as error:
+            print(error)
+        scrapped_data = {
+            "total_projects_completed": total_reviews,
+            "average_review": average_review,
+            "total_reviews_count": total_reviews,
+            "about_me": about,
+            "reviews_with_rating": reviews_with_ratings
+        }
+        return _return_response(scrapped_data, message_global.get("success_scrap"), 1)
+
+    except Exception as error:
+        print(error)
+        error_string = str(error)
+        return _return_response({}, error_string, 0)
+
+# response = fetch_profile("https://www.fiverr.com/aizaz253534")
+# print(response)
