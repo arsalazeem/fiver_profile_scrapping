@@ -1,18 +1,19 @@
+import pprint
+
 from bs4 import BeautifulSoup
 import requests
 import json
 import validators
 
 credentials = {
-    "api_key": "11adcc17388195658fe18d63a4cb715e"
+    "api_key": "476851d3badb5cfe00f44128824e88f6"
 }
 scrap_api = {
     "url": "http://api.scraperapi.com?api_key=" + credentials.get("api_key", None) + "&url="
 }
 message_global = {
-    "payload_error": "Please send a fiverr url in url key",
     "success_scrap": "User data scrapped successfully",
-    "url_validation_error": "Please provide a valid url starting with https://fiverr.com/",
+    "url_validation_error": "Please provide a valid url starting with https://fiverr.com/ in url key",
     "url_not_exist": "This fiverr profile url doesn't exit"
 }
 
@@ -29,14 +30,34 @@ def _return_response(user_profile, msg, success):
     return response_object
 
 
+def try_without_service(url):
+    headers = {
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9"
+    }
+    response = requests.get(url, headers=headers)
+    print("***************")
+    print(response.status_code)
+    print("***************")
+    if response.status_code != 200:
+        return False
+    else:
+        return response
+
+
 def _fetch_html_structure(url):
-    res = requests.get(scrap_api["url"] + url)
-    code = int(res.status_code)
-    print(code)
-    if res.status_code < 200 or res.status_code > 399:
-        _fetch_html_structure(url)
-        print("Retrying Have Patince")
-    return res
+    response = try_without_service(url)
+    if response is not False:
+        return response
+    else:
+        res = requests.get(scrap_api.get("url", None) + url)
+        if res.status_code == 200 and res is not None and "Request failed" not in res:
+            return res
+        else:
+            print(res.text)
+            _fetch_html_structure(url)
+
+
 
 
 def validate_profile_url(res, profile_url):
@@ -176,8 +197,8 @@ def lambda_handler(event, context):
         url_body = json.loads(event['body'])
         get_url = url_body["url"]
     except:
-        return _return_response({}, message_global.get("payload_error", "some error occurred"), 0)
-        # payload_error
+        return _return_response({}, message_global.get("url_validation_error"), 0)
+
     url = get_url
     valid = validators.url(url)
     if not valid:
@@ -232,5 +253,11 @@ def lambda_handler(event, context):
         error_string = str(error)
         return _return_response({}, error_string, 0)
 
-# response = fetch_profile("https://www.fiverr.com/aizaz253534")
-# print(response)
+
+# a = try_without_service("https://www.fiverr.com/mobarakt94")
+# print(a)
+# if __name__ == '__main__':
+#     for i in range(1,100):
+#         response = fetch_profile("https://www.fiverr.com/mobarakt94")
+#         print(response)
+
