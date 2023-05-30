@@ -8,7 +8,7 @@ import json
 import validators
 import time
 credentials={
-    "api_key": "11adcc17388195658fe18d63a4cb715e"
+    "api_key": "provide_api_key_for_proxy_service_here"
 }
 scrap_api={
     "url":"http://api.scraperapi.com?api_key="+credentials.get("api_key",None)+"&url="
